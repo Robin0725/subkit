@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SubKit — Fix Out-of-Sync Subtitles Online. Shift, Resync & Convert SRT/VTT Free.</title>
+<meta name="description" content="Shift subtitle timing, fix out-of-sync subtitles with two-point resync, and convert SRT to VTT — all in your browser. Preview against your own video file. No upload, no signup, free.">
+<style>
+  :root {
+    --bg: #f5f7fb;
+    --panel: #ffffff;
+    --border: #dee4f0;
+    --text: #1a2235;
+    --muted: #69748e;
+    --accent: #7c3aed;
+    --accent-dark: #6d28d9;
+    --green: #16a34a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif; }
+  header { background: var(--panel); border-bottom: 1px solid var(--border); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 20; }
+  .logo { font-weight: 800; font-size: 19px; }
+  .logo span { color: var(--accent); }
+  .pro-pill { background: #f3eeff; border: 1px solid #ddd0fb; color: var(--accent-dark); padding: 7px 14px; border-radius: 99px; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .hero { text-align: center; padding: 42px 20px 6px; }
+  .hero h1 { font-size: clamp(25px, 4.2vw, 38px); letter-spacing: -.7px; }
+  .hero h1 em { font-style: normal; color: var(--accent); }
+  .hero p { color: var(--muted); max-width: 600px; margin: 12px auto 0; font-size: 16px; line-height: 1.65; }
+  .wrap { max-width: 980px; margin: 28px auto 60px; padding: 0 18px; }
+  .dropzone { border: 2px dashed #bcc7e2; background: var(--panel); border-radius: 16px; padding: 50px 28px; text-align: center; cursor: pointer; transition: .2s; }
+  .dropzone:hover, .dropzone.over { border-color: var(--accent); background: #faf8ff; }
+  .dropzone .big { font-size: 38px; margin-bottom: 8px; }
+  .dropzone h2 { font-size: 18px; margin-bottom: 5px; }
+  .dropzone p { color: var(--muted); font-size: 14px; }
+  #workbench { display: none; gap: 20px; flex-wrap: wrap; align-items: flex-start; }
+  .col { flex: 1 1 440px; min-width: 320px; display: flex; flex-direction: column; gap: 18px; }
+  .card { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 20px; }
+  .card h3 { font-size: 15px; margin-bottom: 4px; }
+  .card .sub { color: var(--muted); font-size: 13px; line-height: 1.55; margin-bottom: 14px; }
+  .filebar { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .filebar b { font-size: 14px; }
+  .filebar .meta { color: var(--muted); font-size: 13px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  input[type=text], input[type=number] {
+    background: #f6f8fc;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 14px;
+    color: var(--text);
+    font-family: inherit;
+  }
+  input:focus { outline: none; border-color: var(--accent); }
+  .btn { background: #f1f3fa; border: 1px solid var(--border); color: var(--text); padding: 10px 16px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .btn:hover { background: #e9ecf6; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: var(--accent-dark); }
+  .btn.green { background: var(--green); border-color: var(--green); color: #fff; }
+  .btn.sm { padding: 8px 12px; font-size: 13px; }
+  .num { width: 110px; }
+  .timefield { width: 150px; }
+  .syncline { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; margin-bottom: 10px; }
+  .syncline .cuetxt { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .syncline .cuetxt b { color: var(--text); font-weight: 600; }
+  .cuelist { max-height: 300px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; }
+  .cue { display: flex; gap: 12px; padding: 8px 12px; border-bottom: 1px solid #eef1f8; }
+  .cue:last-child { border-bottom: none; }
+  .cue .t { color: var(--accent-dark); font-family: ui-monospace, Menlo, monospace; font-size: 12px; white-space: nowrap; }
+  .cue .x { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+  video { width: 100%; border-radius: 12px; background: #000; display: none; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--text); color: #fff; padding: 11px 20px; border-radius: 10px;
+    font-size: 14px; opacity: 0; transition: opacity .25s; pointer-events: none; z-index: 80;
+  }
+  .toast.show { opacity: 1; }
+  .content { max-width: 740px; margin: 0 auto; padding: 6px 20px 70px; }
+  .content h2 { font-size: 21px; margin: 34px 0 10px; letter-spacing: -.3px; }
+  .content p, .content li { color: var(--muted); font-size: 15px; line-height: 1.75; }
+  .content ul { padding-left: 22px; }
+  .modal-bg { position: fixed; inset: 0; background: rgba(15,20,35,.55); display: none; align-items: center; justify-content: center; z-index: 60; }
+  .modal-bg.open { display: flex; }
+  .modal { background: #fff; border-radius: 16px; padding: 28px; max-width: 440px; margin: 20px; }
+  .modal h3 { margin-bottom: 10px; }
+  .modal p, .modal li { color: var(--muted); font-size: 14px; line-height: 1.7; }
+  .modal ul { padding-left: 20px; margin: 8px 0 14px; }
+  .modal .btn { float: right; }
+  footer { border-top: 1px solid var(--border); padding: 18px 24px; color: var(--muted); font-size: 13px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Sub<span>Kit</span></div>
+  <button class="pro-pill" onclick="openModal('promodal')">✨ Batch mode — soon</button>
+</header>
+
+<div class="hero">
+  <h1>Subtitles out of sync? <em>Fixed in 10 seconds.</em></h1>
+  <p>Shift timing, stretch-resync, convert SRT ⇄ VTT, and preview against your own video — all inside your browser. Nothing is uploaded anywhere.</p>
+</div>
+
+<div class="wrap">
+  <div class="dropzone" id="dropzone">
+    <div class="big">🎬</div>
+    <h2>Drop your subtitle file here</h2>
+    <p>.srt or .vtt — or click to browse. Files stay on your computer.</p>
+  </div>
+
+  <div id="workbench">
+    <div class="col">
+      <div class="card">
+        <div class="filebar">
+          <div><b id="fname">subtitles.srt</b><div class="meta" id="fmeta"></div></div>
+          <div class="row">
+            <button class="btn sm" onclick="resetCues()">↺ Reset</button>
+            <button class="btn sm" onclick="location.reload()">✕ New file</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>① Shift everything</h3>
+        <p class="sub">Subtitles appear too early or too late by a constant amount? Shift them. Positive = later, negative = earlier.</p>
+        <div class="row">
+          <input type="number" class="num" id="shiftval" step="0.1" value="1.0"> <span style="color:var(--muted);font-size:14px">seconds</span>
+          <button class="btn primary" onclick="applyShift()">Apply shift</button>
+          <button class="btn sm" onclick="quickShift(-0.5)">−0.5s</button>
+          <button class="btn sm" onclick="quickShift(0.5)">+0.5s</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>② Stretch resync (two points)</h3>
+        <p class="sub">Drift gets worse over time? (Usually a frame-rate mismatch.) Tell us when the first and last lines should appear — we recalculate every line in between.</p>
+        <div class="syncline">
+          <div class="cuetxt"><b>First line:</b> <span id="firstcue"></span></div>
+          <input type="text" class="timefield" id="t-first" placeholder="00:00:12.400">
+        </div>
+        <div class="syncline">
+          <div class="cuetxt"><b>Last line:</b> <span id="lastcue"></span></div>
+          <input type="text" class="timefield" id="t-last" placeholder="01:32:05.000">
+        </div>
+        <button class="btn primary" onclick="applySync()">Resync all lines</button>
+      </div>
+
+      <div class="card">
+        <h3>③ Download</h3>
+        <p class="sub">Same subtitles, fixed timing — pick your format.</p>
+        <div class="row">
+          <button class="btn green" onclick="dl('srt')">⬇ Download .SRT</button>
+          <button class="btn green" onclick="dl('vtt')">⬇ Download .VTT</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <h3>Preview with your video (optional)</h3>
+        <p class="sub">Open the matching video file from your computer — it plays locally with your fixed subtitles on top. The fastest way to verify sync before downloading.</p>
+        <button class="btn" onclick="document.getElementById('vfile').click()">🎞 Open video file</button>
+        <input type="file" id="vfile" accept="video/*" hidden>
+        <video id="video" controls crossorigin="anonymous" style="margin-top:14px"></video>
+      </div>
+      <div class="card">
+        <h3>Timeline <span id="cuecount" style="color:var(--muted);font-weight:400;font-size:13px"></span></h3>
+        <div class="cuelist" id="cuelist"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="content">
+  <h2>How to fix out-of-sync subtitles</h2>
+  <p>There are only two kinds of subtitle desync. <b>Constant offset</b>: every line is early or late by the same amount (caused by different cuts/intros) — fix it with a single shift. <b>Progressive drift</b>: the error grows as the video plays (caused by frame-rate mismatch, e.g. a 23.976 fps subtitle on a 25 fps video) — fix it with the two-point stretch resync. SubKit does both, plus SRT⇄VTT conversion, with nothing leaving your browser.</p>
+  <h2>FAQ</h2>
+  <ul>
+    <li><b>Is my file uploaded?</b> No. Parsing, shifting and converting all happen in your browser. Your video never leaves your computer either.</li>
+    <li><b>What formats are supported?</b> SRT and WebVTT in, SRT and WebVTT out. More on request.</li>
+    <li><b>My subtitles show weird characters like Ã© or �.</b> That's an encoding issue — SubKit auto-detects and repairs the common Windows-1252 case when loading.</li>
+    <li><b>Time format for resync?</b> Use <code>HH:MM:SS.mmm</code>, <code>MM:SS</code>, or plain seconds — all accepted.</li>
+    <li><b>Is it really free?</b> Yes. A one-time-purchase batch mode (fix a whole season at once) is coming, but single-file fixing stays free.</li>
+  </ul>
+</div>
+
+<footer>
+  <span>© 2026 SubKit — subtitle tools that run in your browser.</span>
+  <span>No upload. No signup. No watermark.</span>
+</footer>
+
+<div class="modal-bg" id="promodal" onclick="if(event.target===this)closeModal('promodal')">
+  <div class="modal">
+    <h3>✨ Batch mode — coming soon</h3>
+    <ul>
+      <li>Fix a whole season of subtitle files at once</li>
+      <li>FPS conversion presets (23.976 ⇄ 25 ⇄ 29.97)</li>
+      <li>One-time purchase. Never a subscription.</li>
+    </ul>
+    <p>Single-file fixing is free and stays free.</p>
+    <button class="btn primary" onclick="closeModal('promodal')">Got it</button>
+  </div>
+</div>
+
+<input type="file" id="file" accept=".srt,.vtt,text/plain" hidden>
+<div class="toast" id="toast"></div>
+
+<script>
+let cues = [];        // {start, end, text} in ms
+let original = [];
+let fileBase = 'subtitles';
+let trackUrl = null;
+
+/* ---------- parsing ---------- */
+function parseTime(s) {
+  s = s.trim().replace(',', '.');
+  const parts = s.split(':');
+  let h = 0, m = 0, sec = 0;
+  if (parts.length === 3) { h = +parts[0]; m = +parts[1]; sec = parseFloat(parts[2]); }
+  else if (parts.length === 2) { m = +parts[0]; sec = parseFloat(parts[1]); }
+  else if (parts.length === 1) { sec = parseFloat(parts[0]); }
+  if ([h, m, sec].some(isNaN)) return null;
+  return Math.round((h * 3600 + m * 60 + sec) * 1000);
+}
+
+function parseSubs(txt) {
+  txt = txt.replace(/^﻿/, '').replace(/\r/g, '');
+  const out = [];
+  const re = /(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}|\d{1,2}:\d{2}[,.]\d{1,3})\s*-->\s*(\d{1,2}:\d{2}:\d{2}[,.]\d{1,3}|\d{1,2}:\d{2}[,.]\d{1,3})[^\n]*\n([\s\S]*?)(?=\n\s*\n|\n*$)/g;
+  let m;
+  while ((m = re.exec(txt)) !== null) {
+    const start = parseTime(m[1]), end = parseTime(m[2]);
+    const text = m[3].replace(/\n+$/, '');
+    if (start !== null && end !== null && text.trim()) out.push({ start, end, text });
+  }
+  return out;
+}
+
+function fmt(ms, vtt) {
+  ms = Math.max(0, Math.round(ms));
+  const h = Math.floor(ms / 3600000);
+  const m = Math.floor(ms % 3600000 / 60000);
+  const s = Math.floor(ms % 60000 / 1000);
+  const f = ms % 1000;
+  const pad = (n, w) => String(n).padStart(w, '0');
+  return pad(h, 2) + ':' + pad(m, 2) + ':' + pad(s, 2) + (vtt ? '.' : ',') + pad(f, 3);
+}
+
+function toSrt() {
+  return cues.map((c, i) => (i + 1) + '\n' + fmt(c.start) + ' --> ' + fmt(c.end) + '\n' + c.text).join('\n\n') + '\n';
+}
+function toVtt() {
+  return 'WEBVTT\n\n' + cues.map(c => fmt(c.start, true) + ' --> ' + fmt(c.end, true) + '\n' + c.text).join('\n\n') + '\n';
+}
+
+/* ---------- loading ---------- */
+const dz = document.getElementById('dropzone');
+dz.onclick = () => document.getElementById('file').click();
+dz.ondragover = e => { e.preventDefault(); dz.classList.add('over'); };
+dz.ondragleave = () => dz.classList.remove('over');
+dz.ondrop = e => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); };
+document.getElementById('file').onchange = e => loadFile(e.target.files[0]);
+
+async function loadFile(f) {
+  if (!f) return;
+  const buf = await f.arrayBuffer();
+  let txt = new TextDecoder('utf-8', { fatal: false }).decode(buf);
+  let enc = 'UTF-8';
+  if (txt.includes('�')) { txt = new TextDecoder('windows-1252').decode(buf); enc = 'Windows-1252 (auto-repaired)'; }
+  const parsed = parseSubs(txt);
+  if (!parsed.length) { alert('Could not find any subtitles in this file. Is it a valid .srt or .vtt?'); return; }
+  cues = parsed;
+  original = parsed.map(c => ({ ...c }));
+  fileBase = f.name.replace(/\.(srt|vtt)$/i, '');
+  document.getElementById('fname').textContent = f.name;
+  document.getElementById('fmeta').textContent = parsed.length + ' lines · ' + fmt(parsed[parsed.length - 1].end) + ' · ' + enc;
+  dz.style.display = 'none';
+  document.getElementById('workbench').style.display = 'flex';
+  refresh();
+  toast(parsed.length + ' subtitle lines loaded — nothing was uploaded.');
+}
+
+/* ---------- operations ---------- */
+function applyShift() {
+  const v = parseFloat(document.getElementById('shiftval').value);
+  if (isNaN(v) || v === 0) return;
+  shiftBy(v * 1000);
+}
+function quickShift(s) { shiftBy(s * 1000); }
+function shiftBy(ms) {
+  cues.forEach(c => { c.start += ms; c.end += ms; });
+  refresh();
+  toast('Shifted by ' + (ms > 0 ? '+' : '') + (ms / 1000) + 's');
+}
+
+function applySync() {
+  const t1 = parseTime(document.getElementById('t-first').value);
+  const t2 = parseTime(document.getElementById('t-last').value);
+  if (t1 === null || t2 === null) { alert('Enter both times (e.g. 00:01:23.500).'); return; }
+  const o1 = cues[0].start, o2 = cues[cues.length - 1].start;
+  if (o2 === o1 || t2 <= t1) { alert('The two times must be increasing.'); return; }
+  const a = (t2 - t1) / (o2 - o1), b = t1 - a * o1;
+  cues.forEach(c => { c.start = a * c.start + b; c.end = a * c.end + b; });
+  refresh();
+  toast('Resynced ' + cues.length + ' lines (stretch factor ' + a.toFixed(4) + ')');
+}
+
+function resetCues() {
+  cues = original.map(c => ({ ...c }));
+  refresh();
+  toast('Restored original timing');
+}
+
+function dl(kind) {
+  const data = kind === 'srt' ? toSrt() : toVtt();
+  const a = document.createElement('a');
+  a.download = fileBase + '-fixed.' + kind;
+  a.href = URL.createObjectURL(new Blob([data], { type: 'text/plain;charset=utf-8' }));
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- ui ---------- */
+function strip(t) { return t.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(); }
+
+function refresh() {
+  const first = cues[0], last = cues[cues.length - 1];
+  document.getElementById('firstcue').textContent = '"' + strip(first.text).slice(0, 38) + '" — now at ' + fmt(first.start, true);
+  document.getElementById('lastcue').textContent = '"' + strip(last.text).slice(0, 38) + '" — now at ' + fmt(last.start, true);
+  document.getElementById('cuecount').textContent = '· ' + cues.length + ' lines';
+  const list = document.getElementById('cuelist');
+  list.innerHTML = '';
+  const frag = document.createDocumentFragment();
+  cues.forEach(c => {
+    const d = document.createElement('div');
+    d.className = 'cue';
+    const t = document.createElement('span'); t.className = 't'; t.textContent = fmt(c.start, true);
+    const x = document.createElement('span'); x.className = 'x'; x.textContent = strip(c.text);
+    d.append(t, x);
+    frag.appendChild(d);
+  });
+  list.appendChild(frag);
+  updateTrack();
+}
+
+/* ---------- video preview ---------- */
+const video = document.getElementById('video');
+document.getElementById('vfile').onchange = e => {
+  const f = e.target.files[0];
+  if (!f) return;
+  video.src = URL.createObjectURL(f);
+  video.style.display = 'block';
+  updateTrack();
+  toast('Video opened locally — it is not uploaded.');
+};
+
+function updateTrack() {
+  if (video.style.display === 'none' || !cues.length) return;
+  if (trackUrl) URL.revokeObjectURL(trackUrl);
+  trackUrl = URL.createObjectURL(new Blob([toVtt()], { type: 'text/vtt' }));
+  let tr = video.querySelector('track');
+  if (!tr) {
+    tr = document.createElement('track');
+    tr.kind = 'subtitles';
+    tr.label = 'Fixed subtitles';
+    tr.default = true;
+    video.appendChild(tr);
+  }
+  tr.src = trackUrl;
+  if (video.textTracks[0]) video.textTracks[0].mode = 'showing';
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+</script>
+</body>
+</html>
